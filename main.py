@@ -14,9 +14,10 @@
         ]
     }
 '''
-
+import asyncio
 import configparser
 import json
+import os
 
 from telethon.sync import TelegramClient
 from telethon import connection
@@ -36,9 +37,24 @@ config = configparser.ConfigParser()
 config.read("config.ini")
 
 # Присваиваем значения внутренним переменным
-api_id = config['Telegram']['api_id']
+api_id = int(config['Telegram']['api_id'])
 api_hash = config['Telegram']['api_hash']
 username = config['Telegram']['username']
+
+path = "./.data"
+channel_dir = ""
+
+
+def create_path(folder):
+    # Проверяем существует путь или нет
+    isExist = os.path.exists(folder)
+    if not isExist:
+        # Create a new directory because it does not exist
+        os.makedirs(folder)
+        print("Директория " + folder + " создана..")
+
+
+create_path(path)
 
 """
 proxy = (proxy_server, proxy_port, proxy_key)
@@ -84,6 +100,7 @@ async def dump_all_participants(channel):
 async def dump_all_messages(channel):
     """Записывает json-файл с информацией о всех сообщениях канала/чата"""
     offset_msg = 0  # номер записи, с которой начинается считывание
+    offset_msg = 25  # номер записи, с которой начинается считывание
     limit_msg = 100  # максимальное число записей, передаваемых за один раз
 
     all_messages = []  # список всех сообщений
@@ -111,8 +128,22 @@ async def dump_all_messages(channel):
             break
         messages = history.messages
         for message in messages:
+            print("Сохраняется пост ", message.id)
+            message_path = "{0}/{1}/{2}".format(path, channel_dir, str(message.id))
+            create_path(message_path)
             # all_messages.append(message.to_dict())
-            all_messages.append({"id": message.id, "media": message.media})
+            msg = message.to_dict()
+            await  client.download_media(message.media, message_path)
+            all_messages.append(msg)
+
+            # if None is message.video:
+            #     video = ""
+            # else:
+            #     video = message.video
+            # all_messages.append({"id": message.id,
+            #                      "text": message.text, "raw_text": message.raw_text,
+            #                      })
+        # {"photo": message.photo, "video": message.video}
         offset_msg = messages[len(messages) - 1].id
         total_messages = len(all_messages)
         if total_count_limit != 0 and total_messages >= total_count_limit:
@@ -123,7 +154,15 @@ async def dump_all_messages(channel):
 
 
 async def main():
-    url = input("Введите ссылку на канал или чат: ")
+    # url = input("Введите ссылку на телеграм канал или чат: ")
+    url = "https://t.me/kherson_baza"
+
+    split_url = url.split("/")
+    global channel_dir
+    channel_dir = split_url[len(split_url) - 1]
+
+    create_path(path + "/" + channel_dir)
+
     channel = await client.get_entity(url)
     # await dump_all_participants(channel)
     await dump_all_messages(channel)
@@ -135,4 +174,5 @@ with client:
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     # await main()
+    asyncio.run(main())
     pass
