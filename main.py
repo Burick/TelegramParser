@@ -60,10 +60,11 @@ username = config['Telegram']['username']
 path = "./.data"
 channel_dir = ""
 message_path = ""
+channel_messages_path = ""
 
 
 def create_path(folder):
-    # Проверяем существует путь или нет
+    # checking if the path exists
     is_exist = os.path.exists(folder)
     if not is_exist:
         # Create a new directory because it does not exist
@@ -142,26 +143,25 @@ async def dump_all_messages(channel):
             limit=limit_msg, max_id=0, min_id=0,
             hash=0))
         if not history.messages:
+            # await client.disconnect()
             break
         messages = history.messages
         grouped_id = None
 
         for message in messages:
             global message_path
-            if message.id == 14:
+            if message.id == 6:
                 print("Stop")
             if message.grouped_id and grouped_id != message.grouped_id:
                 print("\n--------------------------------\n")
                 print(f'Try Save Fist Post group_id {message.grouped_id}: post_id - {message.id}')
-                # if os.path.exists(message_path):
-                #     msg_dict[grouped_id]["media"] = os.listdir(message_path)
 
                 grouped_id = message.grouped_id
 
                 msg_dict = await parse_message_no_grouped_data(message=message, is_first_in_group=True)
 
                 all_messages.append(msg_dict)
-                with open('channel_messages.json', 'w', encoding='utf8') as outfile:
+                with open(f'{channel_messages_path}.json', 'w', encoding='utf8') as outfile:
                     json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
                 print(f'Post {message.id} saved...')
 
@@ -170,7 +170,7 @@ async def dump_all_messages(channel):
                 msg_dict = await parse_message_no_grouped_data(message=message, msg_dict=msg_dict)
 
                 all_messages[-1] = msg_dict
-                with open('channel_messages.json', 'w', encoding='utf8') as outfile:
+                with open(f'{channel_messages_path}.json', 'w', encoding='utf8') as outfile:
                     json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
                 print(f'Post {message.id} saved...')
             else:
@@ -178,7 +178,7 @@ async def dump_all_messages(channel):
                 msg_dict = await parse_message_no_grouped_data(message)
 
                 all_messages.append(msg_dict)
-                with open('channel_messages.json', 'w', encoding='utf8') as outfile:
+                with open(f'{channel_messages_path}.json', 'w', encoding='utf8') as outfile:
                     json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
                 print(f'Post {message.id} saved...')
 
@@ -196,7 +196,6 @@ async def parse_message_no_grouped_data(message, msg_dict=None, is_first_in_grou
         is_grouped = True
     else:
         is_grouped = False
-    print(f'Try Save post is_grouped {is_grouped} {message.grouped_id}: {message.id}')
     if not is_grouped or is_first_in_group:
         message_path = f'{channel_dir}/{str(message.id)}'
         create_path(message_path)
@@ -230,11 +229,11 @@ async def parse_message_no_grouped_data(message, msg_dict=None, is_first_in_grou
 
 async def main():
     url = input("Enter the link to the telegram channel or chat: ")
-    # url = "https://t.me/kherson_baza"
 
     split_url = url.split("/")
-    global channel_dir
+    global channel_dir, channel_messages_path
     channel_dir = path + "/" + split_url[len(split_url) - 1]
+    channel_messages_path = channel_dir
     try:
         shutil.rmtree(channel_dir)
     except Exception as e:
@@ -249,7 +248,3 @@ async def main():
 
 with client:
     client.loop.run_until_complete(main())
-
-if __name__ == '__main__':
-    asyncio.run(main())
-    pass
