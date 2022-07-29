@@ -1,5 +1,19 @@
+# -*- coding: utf-8 -*-
 # https://proglib.io/p/pishem-prostoy-grabber-dlya-telegram-chatov-na-python-2019-11-06
 # https://t.me/kherson_baza
+# Note Telegram’s flood wait limit
+# for GetHistoryRequest seems to be around 30 seconds per 10 requests, ...
+
+# медленная закачка файлов, в пределах 60-80 Кб/сек,
+# судя по всему обусловленно самим API Телеграма
+# Если необходима скорость получения информации то как вариант
+# можно рассмотреть сохранение чата с десктопного клиента
+# с последующим парсингом сохраненных данных
+
+# теоретически должно работать асинхронно, но по факту это не так,
+# стоит более подробно рассмотреть возможность асинхронной закачки
+# или возможно другой способ получения контента
+
 '''
     {
         "id": 910,
@@ -18,6 +32,7 @@ import asyncio
 import configparser
 import json
 import os
+import shutil
 
 from telethon.sync import TelegramClient
 from telethon import connection
@@ -47,11 +62,11 @@ channel_dir = ""
 
 def create_path(folder):
     # Проверяем существует путь или нет
-    isExist = os.path.exists(folder)
-    if not isExist:
+    is_exist = os.path.exists(folder)
+    if not is_exist:
         # Create a new directory because it does not exist
         os.makedirs(folder)
-        print("Директория " + folder + " создана..")
+        print("Folder " + folder + " created..")
 
 
 create_path(path)
@@ -100,7 +115,7 @@ async def dump_all_participants(channel):
 async def dump_all_messages(channel):
     """Записывает json-файл с информацией о всех сообщениях канала/чата"""
     offset_msg = 0  # номер записи, с которой начинается считывание
-    offset_msg = 25  # номер записи, с которой начинается считывание
+    offset_msg = 0  # номер записи, с которой начинается считывание
     limit_msg = 100  # максимальное число записей, передаваемых за один раз
 
     all_messages = []  # список всех сообщений
@@ -117,6 +132,7 @@ async def dump_all_messages(channel):
                 return list(o)
             return json.JSONEncoder.default(self, o)
 
+    msg_dict = {}
     while True:
         history = await client(GetHistoryRequest(
             peer=channel,
@@ -127,43 +143,112 @@ async def dump_all_messages(channel):
         if not history.messages:
             break
         messages = history.messages
-        for message in messages:
-            print("Сохраняется пост ", message.id)
-            message_path = "{0}/{1}/{2}".format(path, channel_dir, str(message.id))
-            create_path(message_path)
-            # all_messages.append(message.to_dict())
-            msg = message.to_dict()
-            await  client.download_media(message.media, message_path)
-            all_messages.append(msg)
+        # messages.reverse()
+        # messages_reverse = messages
+        # messages_reverse.reverse()
+        # message_path = None
+        grouped_id = None
 
-            # if None is message.video:
-            #     video = ""
-            # else:
-            #     video = message.video
-            # all_messages.append({"id": message.id,
-            #                      "text": message.text, "raw_text": message.raw_text,
-            #                      })
-        # {"photo": message.photo, "video": message.video}
+        message_path = ""
+        for message in messages:
+            if grouped_id != message.grouped_id:
+                print("Try Save post is grouped_id: ", message.id)
+                if os.path.exists(message_path):
+                    msg_dict[grouped_id]["media"] = os.listdir(message_path)
+
+                grouped_id = message.grouped_id
+                all_messages.append({grouped_id: {}})
+                message_path = f'{channel_dir}/{str(message.id)}'
+                create_path(message_path)
+                post_id = message.id
+                post_text = message.text if message.text else ""
+                post_message = message.message if message.message else ""
+                entities = message.get_entities_text()
+                entities_list = []
+                for entities in entities:
+                    entities_list.append(entities[1])
+                try:
+                    await client.download_media(message.media, message_path + "/")
+                except Exception as e:
+                    print(e)
+                msg_dict[grouped_id] = {"id": post_id, "media": [],
+                                        "text": post_text, "message": post_message,
+                                        "links": entities_list}
+            elif grouped_id:
+                print("is grouped_id")
+                post_text = message.text if message.text else ""
+                post_message = message.message if message.message else ""
+                entities = message.get_entities_text()
+                entities_list = []
+                for entities in entities:
+                    entities_list.append(entities[1])
+                try:
+                    await client.download_media(message.media, message_path + "/")
+                except Exception as e:
+                    print(e)
+
+                msg_dict[grouped_id]["text"] += f'\n{post_text}'
+                msg_dict[grouped_id]["message"] += f'\n{post_message}'
+                if entities_list:
+                    msg_dict[grouped_id]["links"].append(entities_list)
+            else:
+                print("Try Save post no grouped_id: ", message.id)
+                message_path = f'{channel_dir}/{str(message.id)}'
+                create_path(message_path)
+
+                post_id = message.id
+                post_text = message.text if message.text else ""
+                raw_text = message.raw_text if message.raw_text else ""
+                post_message = message.message if message.message else ""
+                entities = message.get_entities_text()
+                entities_list = []
+                for entities in entities:
+                    entities_list.append(entities[1])
+                try:
+                    await client.download_media(message.media, message_path + "/" + str(message.id))
+                except Exception as e:
+                    print(e)
+                msg_dict[message.id] = {"id": post_id,
+                                        "text": post_text,
+                                        "raw_text": raw_text,
+                                        "message": post_message,
+                                        "links": entities_list,
+                                        "media": []}
+                msg_dict[message.id]["media"] = os.listdir(message_path)
+
+                all_messages.append(msg_dict)
+                with open('channel_messages.json', 'w', encoding='utf8') as outfile:
+                    json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
+                print(f'Post {message.id} saved...')
+
+            # msg = message.to_dict()
+            # all_messages.append(msg)
+
         offset_msg = messages[len(messages) - 1].id
         total_messages = len(all_messages)
         if total_count_limit != 0 and total_messages >= total_count_limit:
             break
 
-    with open('channel_messages.json', 'w', encoding='utf8') as outfile:
-        json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
+    # with open('channel_messages.json', 'w', encoding='utf8') as outfile:
+    #     # json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
+    #     json.dump(msg_dict, outfile, ensure_ascii=False, cls=DateTimeEncoder)
 
 
 async def main():
-    # url = input("Введите ссылку на телеграм канал или чат: ")
+    # url = input("Enter the link to the telegram channel or chat: ")
     url = "https://t.me/kherson_baza"
 
     split_url = url.split("/")
     global channel_dir
-    channel_dir = split_url[len(split_url) - 1]
-
-    create_path(path + "/" + channel_dir)
+    channel_dir = path + "/" + split_url[len(split_url) - 1]
+    try:
+        shutil.rmtree(channel_dir)
+    except Exception as e:
+        print(e)
+    create_path(channel_dir)
 
     channel = await client.get_entity(url)
+
     # await dump_all_participants(channel)
     await dump_all_messages(channel)
 
@@ -171,8 +256,6 @@ async def main():
 with client:
     client.loop.run_until_complete(main())
 
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    # await main()
     asyncio.run(main())
     pass
