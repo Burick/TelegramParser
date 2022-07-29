@@ -9,11 +9,12 @@
 # Если необходима скорость получения информации то как вариант
 # можно рассмотреть сохранение чата с десктопного клиента
 # с последующим парсингом сохраненных данных
+# насчет скорости частично решается установкой cryptg-0.3.1
+# скорость закачки примерно 1.5-2 Мб/сек
 
 # теоретически должно работать асинхронно, но по факту это не так,
 # стоит более подробно рассмотреть возможность асинхронной закачки
 # или возможно другой способ получения контента
-
 '''
     {
         "id": 910,
@@ -58,6 +59,7 @@ username = config['Telegram']['username']
 
 path = "./.data"
 channel_dir = ""
+message_path = ""
 
 
 def create_path(folder):
@@ -115,7 +117,6 @@ async def dump_all_participants(channel):
 async def dump_all_messages(channel):
     """Записывает json-файл с информацией о всех сообщениях канала/чата"""
     offset_msg = 0  # номер записи, с которой начинается считывание
-    offset_msg = 0  # номер записи, с которой начинается считывание
     limit_msg = 100  # максимальное число записей, передаваемых за один раз
 
     all_messages = []  # список всех сообщений
@@ -143,74 +144,63 @@ async def dump_all_messages(channel):
         if not history.messages:
             break
         messages = history.messages
-        # messages.reverse()
-        # messages_reverse = messages
-        # messages_reverse.reverse()
-        # message_path = None
         grouped_id = None
 
-        message_path = ""
         for message in messages:
+            global message_path
+            if message.id == 14:
+                print("Stop")
             if message.grouped_id and grouped_id != message.grouped_id:
-                print("Try Save post is grouped_id: ", message.id)
-                if os.path.exists(message_path):
-                    msg_dict[grouped_id]["media"] = os.listdir(message_path)
+                print("\n--------------------------------\n")
+                print(f'Try Save Fist Post group_id {message.grouped_id}: post_id - {message.id}')
+                # if os.path.exists(message_path):
+                #     msg_dict[grouped_id]["media"] = os.listdir(message_path)
 
                 grouped_id = message.grouped_id
 
-                msg_dict = await parse_message_no_grouped_data(message)
+                msg_dict = await parse_message_no_grouped_data(message=message, is_first_in_group=True)
 
                 all_messages.append(msg_dict)
                 with open('channel_messages.json', 'w', encoding='utf8') as outfile:
                     json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
                 print(f'Post {message.id} saved...')
 
-            elif grouped_id:
-                print("Add data to post is grouped_id: ", message.id)
-                post_text = message.text if message.text else ""
-                post_message = message.message if message.message else ""
-                entities = message.get_entities_text()
-                entities_list = []
-                for entities in entities:
-                    entities_list.append(entities[1])
-                try:
-                    await client.download_media(message.media, message_path + "/")
-                except Exception as e:
-                    print(e)
+            elif message.grouped_id:
+                print(f'Add data to post is grouped_id {message.grouped_id}:  post_id - {message.id}')
+                msg_dict = await parse_message_no_grouped_data(message=message, msg_dict=msg_dict)
 
-                msg_dict[grouped_id]["text"] += f'\n{post_text}'
-                msg_dict[grouped_id]["message"] += f'\n{post_message}'
-                if entities_list:
-                    msg_dict[grouped_id]["links"].append(entities_list)
+                all_messages[-1] = msg_dict
+                with open('channel_messages.json', 'w', encoding='utf8') as outfile:
+                    json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
+                print(f'Post {message.id} saved...')
             else:
+                print("\n--------------------------------\n")
                 msg_dict = await parse_message_no_grouped_data(message)
 
                 all_messages.append(msg_dict)
                 with open('channel_messages.json', 'w', encoding='utf8') as outfile:
                     json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
                 print(f'Post {message.id} saved...')
-
-            # msg = message.to_dict()
-            # all_messages.append(msg)
 
         offset_msg = messages[len(messages) - 1].id
         total_messages = len(all_messages)
         if total_count_limit != 0 and total_messages >= total_count_limit:
             break
 
-    # with open('channel_messages.json', 'w', encoding='utf8') as outfile:
-    #     # json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
-    #     json.dump(msg_dict, outfile, ensure_ascii=False, cls=DateTimeEncoder)
 
-
-async def parse_message_no_grouped_data(message):
+async def parse_message_no_grouped_data(message, msg_dict=None, is_first_in_group=False):
+    if msg_dict is None:
+        msg_dict = {"id": 0, "text": "", "raw_text": "", "message": "", "links": [], "media": []}
+    global message_path
     if message.grouped_id:
-        is_grouped = "grouped_id"
+        is_grouped = True
     else:
-        is_grouped = "not grouped_id"
-    print(f'Try Save post {is_grouped}: {message.id}' )
-    message_path = f'{channel_dir}/{str(message.id)}'
-    create_path(message_path)
+        is_grouped = False
+    print(f'Try Save post is_grouped {is_grouped} {message.grouped_id}: {message.id}')
+    if not is_grouped or is_first_in_group:
+        message_path = f'{channel_dir}/{str(message.id)}'
+        create_path(message_path)
+        msg_dict["id"] = message.id
     post_id = message.id
     post_text = message.text if message.text else ""
     raw_text = message.raw_text if message.raw_text else ""
@@ -220,17 +210,27 @@ async def parse_message_no_grouped_data(message):
     for entities in entities:
         entities_list.append(entities[1])
     try:
+        print("Download media...")
         await client.download_media(message.media, message_path + "/" + str(message.id))
     except Exception as e:
         print(e)
-    msg_dict = {"id": post_id, "text": post_text, "raw_text": raw_text, "message": post_message, "links": entities_list,
-                "media": os.listdir(message_path)}
+
+    if is_grouped and not is_first_in_group:
+        msg_dict["text"] += ("\n" + post_text)
+        msg_dict["raw_text"] += ("\n" + raw_text)
+        msg_dict["message"] += ("\n" + post_message)
+        msg_dict["links"] += entities_list
+        msg_dict["media"] = os.listdir(message_path)
+    else:
+        msg_dict = {"id": post_id, "text": post_text, "raw_text": raw_text, "message": post_message,
+                    "links": entities_list,
+                    "media": os.listdir(message_path)}
     return msg_dict
 
 
 async def main():
-    # url = input("Enter the link to the telegram channel or chat: ")
-    url = "https://t.me/kherson_baza"
+    url = input("Enter the link to the telegram channel or chat: ")
+    # url = "https://t.me/kherson_baza"
 
     split_url = url.split("/")
     global channel_dir
