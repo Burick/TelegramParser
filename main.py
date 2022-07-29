@@ -151,32 +151,22 @@ async def dump_all_messages(channel):
 
         message_path = ""
         for message in messages:
-            if message.grouped_id && grouped_id != message.grouped_id:
+            if message.grouped_id and grouped_id != message.grouped_id:
                 print("Try Save post is grouped_id: ", message.id)
                 if os.path.exists(message_path):
                     msg_dict[grouped_id]["media"] = os.listdir(message_path)
 
                 grouped_id = message.grouped_id
 
-                all_messages.append({grouped_id: {}})
-                message_path = f'{channel_dir}/{str(message.id)}'
-                create_path(message_path)
-                post_id = message.id
-                post_text = message.text if message.text else ""
-                post_message = message.message if message.message else ""
-                entities = message.get_entities_text()
-                entities_list = []
-                for entities in entities:
-                    entities_list.append(entities[1])
-                try:
-                    await client.download_media(message.media, message_path + "/")
-                except Exception as e:
-                    print(e)
-                msg_dict[grouped_id] = {"id": post_id, "media": [],
-                                        "text": post_text, "message": post_message,
-                                        "links": entities_list}
+                msg_dict = await parse_message_no_grouped_data(message)
+
+                all_messages.append(msg_dict)
+                with open('channel_messages.json', 'w', encoding='utf8') as outfile:
+                    json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
+                print(f'Post {message.id} saved...')
+
             elif grouped_id:
-                print("is grouped_id")
+                print("Add data to post is grouped_id: ", message.id)
                 post_text = message.text if message.text else ""
                 post_message = message.message if message.message else ""
                 entities = message.get_entities_text()
@@ -214,7 +204,11 @@ async def dump_all_messages(channel):
 
 
 async def parse_message_no_grouped_data(message):
-    print("Try Save post no grouped_id: ", message.id)
+    if message.grouped_id:
+        is_grouped = "grouped_id"
+    else:
+        is_grouped = "not grouped_id"
+    print(f'Try Save post {is_grouped}: {message.id}' )
     message_path = f'{channel_dir}/{str(message.id)}'
     create_path(message_path)
     post_id = message.id
