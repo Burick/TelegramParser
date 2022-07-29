@@ -1,24 +1,4 @@
 # -*- coding: utf-8 -*-
-# https://proglib.io/p/pishem-prostoy-grabber-dlya-telegram-chatov-na-python-2019-11-06
-# https://t.me/kherson_baza
-# Note Telegram’s flood wait limit
-# for GetHistoryRequest seems to be around 30 seconds per 10 requests, ...
-
-'''
-    {
-        "id": 910,
-        "media": [
-            "media/911.jpg”,
-            "media/910.mp4”
-        ],
-        "text": "Колабораціонізм. Рашизм.\n  Шамрай Аліна\n  21.06.1989 р.н.\n Взаємодія з окупаційною владою…”,
-        "links": [
-            "https://www.facebook.com/profile.php?id=100013324181103",
-            "https://ok.ru/profile/579222091407"
-        ]
-    }
-'''
-import asyncio
 import configparser
 import json
 import os
@@ -179,7 +159,7 @@ async def dump_all_messages(channel):
 
 async def parse_message_no_grouped_data(message, msg_dict=None, is_first_in_group=False):
     if msg_dict is None:
-        msg_dict = {"id": 0, "text": "", "raw_text": "", "message": "", "links": [], "media": []}
+        msg_dict = {"id": 0, "text": "", "links": [], "media": []}
     global message_path
     if message.grouped_id:
         is_grouped = True
@@ -204,13 +184,11 @@ async def parse_message_no_grouped_data(message, msg_dict=None, is_first_in_grou
         print(e)
 
     if is_grouped and not is_first_in_group:
-        msg_dict["text"] += ("\n" + post_text)
-        msg_dict["raw_text"] += ("\n" + raw_text)
-        msg_dict["message"] += ("\n" + post_message)
+        msg_dict["text"] += ("\n" + post_message)
         msg_dict["links"] += entities_list
         msg_dict["media"] = os.listdir(message_path)
     else:
-        msg_dict = {"id": post_id, "text": post_text, "raw_text": raw_text, "message": post_message,
+        msg_dict = {"id": post_id, "text": post_message,
                     "links": entities_list,
                     "media": os.listdir(message_path)}
     return msg_dict
