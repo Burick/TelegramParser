@@ -198,8 +198,8 @@ async def grab_message(message, msg_dict=None, is_first_in_group=False):
 
 
 async def main():
-    # url = input("Enter the link to the telegram channel or chat: ")
-    url = "https://t.me/kherson_baza"
+    url = input("Enter the link to the telegram channel or chat: ")
+    # url = "https://t.me/kherson_baza"
 
     split_url = url.split("/")
     global channel_dir, channel_messages_path, min_message_id, all_messages
