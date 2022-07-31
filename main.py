@@ -30,6 +30,8 @@ path = "./.data"
 channel_dir = ""
 message_path = ""
 channel_messages_path = ""
+min_message_id = 0
+all_messages = []
 
 
 def create_path(folder):
@@ -86,10 +88,9 @@ async def dump_all_participants(channel):
 
 async def dump_all_messages(channel):
     """Записывает json-файл с информацией о всех сообщениях канала/чата"""
+    global all_messages  # список всех сообщений
     offset_msg = 0  # номер записи, с которой начинается считывание
     limit_msg = 100  # максимальное число записей, передаваемых за один раз
-
-    all_messages = []  # список всех сообщений
     total_messages = 0
     total_count_limit = 0  # поменяйте это значение, если вам нужны не все сообщения
 
@@ -109,45 +110,43 @@ async def dump_all_messages(channel):
             peer=channel,
             offset_id=offset_msg,
             offset_date=None, add_offset=0,
-            limit=limit_msg, max_id=0, min_id=0,
+            limit=limit_msg, max_id=0, min_id=min_message_id,
             hash=0))
         if not history.messages:
-            # await client.disconnect()
             break
         messages = history.messages
         grouped_id = None
 
         for message in messages:
             global message_path
-            if message.id == 6:
-                print("Stop")
             if message.grouped_id and grouped_id != message.grouped_id:
                 print("\n--------------------------------\n")
-                print(f'Try Save Fist Post group_id {message.grouped_id}: post_id - {message.id}')
+                print(f'Save Fist grouped post group_id {message.grouped_id}: post_id - {message.id}')
 
                 grouped_id = message.grouped_id
 
-                msg_dict = await parse_message_no_grouped_data(message=message, is_first_in_group=True)
+                msg_dict = await grab_message(message=message, is_first_in_group=True)
 
                 all_messages.append(msg_dict)
-                with open(f'{channel_messages_path}.json', 'w', encoding='utf8') as outfile:
+                with open(f'{channel_messages_path}', 'w', encoding='utf8') as outfile:
                     json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
                 print(f'Post {message.id} saved...')
 
             elif message.grouped_id:
-                print(f'Add data to post is grouped_id {message.grouped_id}:  post_id - {message.id}')
-                msg_dict = await parse_message_no_grouped_data(message=message, msg_dict=msg_dict)
+                print(f'\nAdd data to post is grouped_id {message.grouped_id}:  post_id - {message.id}')
+                msg_dict = await grab_message(message=message, msg_dict=msg_dict)
 
+                # если это элемент группы постов то заменяем последние сообщение
                 all_messages[-1] = msg_dict
-                with open(f'{channel_messages_path}.json', 'w', encoding='utf8') as outfile:
+                with open(f'{channel_messages_path}', 'w', encoding='utf8') as outfile:
                     json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
                 print(f'Post {message.id} saved...')
             else:
                 print("\n--------------------------------\n")
-                msg_dict = await parse_message_no_grouped_data(message)
+                msg_dict = await grab_message(message)
 
                 all_messages.append(msg_dict)
-                with open(f'{channel_messages_path}.json', 'w', encoding='utf8') as outfile:
+                with open(f'{channel_messages_path}', 'w', encoding='utf8') as outfile:
                     json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
                 print(f'Post {message.id} saved...')
 
@@ -156,8 +155,14 @@ async def dump_all_messages(channel):
         if total_count_limit != 0 and total_messages >= total_count_limit:
             break
 
+    print("\n\n\nSort message...")
+    all_messages.sort(key=lambda elem: elem["id"], reverse=True)
+    with open(f'{channel_messages_path}', 'w', encoding='utf8') as outfile:
+        json.dump(all_messages, outfile, ensure_ascii=False, cls=DateTimeEncoder)
+    print(f'Sorted message  saved to {channel_messages_path}...')
 
-async def parse_message_no_grouped_data(message, msg_dict=None, is_first_in_group=False):
+
+async def grab_message(message, msg_dict=None, is_first_in_group=False):
     if msg_dict is None:
         msg_dict = {"id": 0, "text": "", "links": [], "media": []}
     global message_path
@@ -170,8 +175,6 @@ async def parse_message_no_grouped_data(message, msg_dict=None, is_first_in_grou
         create_path(message_path)
         msg_dict["id"] = message.id
     post_id = message.id
-    post_text = message.text if message.text else ""
-    raw_text = message.raw_text if message.raw_text else ""
     post_message = message.message if message.message else ""
     entities = message.get_entities_text()
     entities_list = []
@@ -184,7 +187,7 @@ async def parse_message_no_grouped_data(message, msg_dict=None, is_first_in_grou
         print(e)
 
     if is_grouped and not is_first_in_group:
-        msg_dict["text"] += ("\n" + post_message)
+        msg_dict["text"] += ("\n" + post_message) if post_message else ""
         msg_dict["links"] += entities_list
         msg_dict["media"] = os.listdir(message_path)
     else:
@@ -195,23 +198,33 @@ async def parse_message_no_grouped_data(message, msg_dict=None, is_first_in_grou
 
 
 async def main():
-    url = input("Enter the link to the telegram channel or chat: ")
+    # url = input("Enter the link to the telegram channel or chat: ")
+    url = "https://t.me/kherson_baza"
 
     split_url = url.split("/")
-    global channel_dir, channel_messages_path
-    channel_dir = path + "/" + split_url[len(split_url) - 1]
-    channel_messages_path = channel_dir
-    try:
-        shutil.rmtree(channel_dir)
-    except Exception as e:
-        print(e)
-    create_path(channel_dir)
+    global channel_dir, channel_messages_path, min_message_id, all_messages
+    channel_name = split_url[len(split_url) - 1]
+    channel_dir = path + "/" + channel_name
+    channel_messages_path = channel_dir + ".json"
+    if os.path.exists(channel_messages_path):
+        with open(channel_messages_path, encoding='utf-8') as data_file:
+            all_messages = json.load(data_file)
+            min_message_id = all_messages[0]["id"]
+            print(f'\n\n\nLast saved message Id is {min_message_id}')
+    else:
+        if os.path.exists(channel_dir):
+            try:
+                shutil.rmtree(channel_dir)
+            except Exception as e:
+                print(e)
+            create_path(channel_dir)
 
     channel = await client.get_entity(url)
 
     # await dump_all_participants(channel)
     await dump_all_messages(channel)
+    print(f'parsing is over, the data from the channel {channel_name} is saved...')
 
-
-with client:
-    client.loop.run_until_complete(main())
+if __name__ == '__main__':
+    with client:
+        client.loop.run_until_complete(main())

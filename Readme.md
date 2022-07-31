@@ -1,7 +1,9 @@
-# https://proglib.io/p/pishem-prostoy-grabber-dlya-telegram-chatov-na-python-2019-11-06
-# https://t.me/kherson_baza
-# Note Telegram’s flood wait limit
-# for GetHistoryRequest seems to be around 30 seconds per 10 requests, ...
+https://proglib.io/p/pishem-prostoy-grabber-dlya-telegram-chatov-na-python-2019-11-06
+https://t.me/kherson_baza
+
+
+#### Note Telegram’s flood wait limit
+#### etHistoryRequest seems to be around 30 seconds per 10 requests, ...
 
 '''
     {
@@ -17,3 +19,4 @@
         ]
     }
 '''
+###TODO**: Сделать парсинг только новых постов
