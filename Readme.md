@@ -19,4 +19,29 @@ https://t.me/kherson_baza
         ]
     }
 '''
-###TODO**: Сделать парсинг только новых постов
+
+
+# Using 
+<p>Clone repo</p>
+
+` git clone https://github.com/Burick/TelegramParser.git`
+
+`cd TelegramParser`
+
+` virtualenv venv`
+
+`source venv/bin/activate`
+
+`pip install -r requirements.txt`
+
+Rename `config.ini.example` to `config.ini`
+replace data in `config.ini` 
+
+>api_id = Telegram-API-ID
+>
+>api_hash = Telegram-API-Hash
+>
+>username = Your-Telegram-Username`
+
+Run `python main.py` end execute the instructions specified by the script
+
