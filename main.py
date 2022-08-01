@@ -14,6 +14,10 @@ from datetime import date, datetime
 from telethon.tl.functions.channels import GetParticipantsRequest
 from telethon.tl.types import ChannelParticipantsSearch
 
+from telethon.tl.types import MessageEntityUrl, MessageEntityTextUrl,\
+        MessageEntityPhone, MessageEntityEmail, MessageEntityBankCard,\
+        MessageEntityMention, MessageEntityMentionName, MessageEntityUnknown
+
 # класс для работы с сообщениями
 from telethon.tl.functions.messages import GetHistoryRequest
 
@@ -177,9 +181,25 @@ async def grab_message(message, msg_dict=None, is_first_in_group=False):
     post_id = message.id
     post_message = message.message if message.message else ""
     entities = message.get_entities_text()
+    # entities = message.entities if message.entities else []
     entities_list = []
-    for entities in entities:
-        entities_list.append(entities[1])
+    for entity in entities:
+        if isinstance(entity[0], MessageEntityTextUrl):
+            entities_list.append(f'{entity[1]}:  {entity[0].url}')
+        if isinstance(entity[0], MessageEntityUrl):
+            entities_list.append("Url: " + entity[1])
+        if isinstance(entity[0], MessageEntityEmail):
+            entities_list.append("Email: " + entity[1])
+        if isinstance(entity[0], MessageEntityPhone):
+            entities_list.append("Phone: " + entity[1])
+        if isinstance(entity[0], MessageEntityBankCard):
+            entities_list.append("BankCard: " + entity[1])
+        if isinstance(entity[0], MessageEntityMention):
+            entities_list.append("Mention: " + entity[1])
+        if isinstance(entity[0], MessageEntityMentionName):
+            entities_list.append("MentionName: " + entity[1])
+        if isinstance(entity[0], MessageEntityUnknown):
+            entities_list.append("Unknown: " + entity[1])
     try:
         print("Download media...")
         await client.download_media(message.media, message_path + "/" + str(message.id))
@@ -200,6 +220,7 @@ async def grab_message(message, msg_dict=None, is_first_in_group=False):
 async def main():
     url = input("Enter the link to the telegram channel or chat: ")
     # url = "https://t.me/kherson_baza"
+    # url = "https://t.me/molfar_global"
 
     split_url = url.split("/")
     global channel_dir, channel_messages_path, min_message_id, all_messages
@@ -208,7 +229,10 @@ async def main():
     channel_messages_path = channel_dir + ".json"
     if os.path.exists(channel_messages_path):
         with open(channel_messages_path, encoding='utf-8') as data_file:
-            all_messages = json.load(data_file)
+            try:
+                all_messages = json.load(data_file)
+            except Exception as e:
+                print(e)
             min_message_id = all_messages[0]["id"]
             print(f'\n\n\nLast saved message Id is {min_message_id}')
     else:
